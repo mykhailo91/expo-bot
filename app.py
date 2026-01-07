@@ -22,7 +22,7 @@ translations = {
         'title': "🚀 Expo AI Асистент",
         'lang_label': "Мова",
         'input_company_label': "🏢 Назва компанії",
-        'input_company_placeholder': "Введіть назву",
+        'input_company_placeholder': "Введіть назву (Пріоритетне поле)",
         'photo_method_label': "📸 Фото візитки",
         'method_camera': "Камера",
         'method_upload': "Завантажити файл",
@@ -42,7 +42,7 @@ translations = {
         'title': "🚀 Expo AI Assistant",
         'lang_label': "Language",
         'input_company_label': "🏢 Company Name",
-        'input_company_placeholder': "Enter name",
+        'input_company_placeholder': "Enter name (Priority field)",
         'photo_method_label': "📸 Business Card Photo",
         'method_camera': "Camera",
         'method_upload': "Upload File",
@@ -94,7 +94,6 @@ def load_history():
     except Exception as e:
         return []
 
-# Функція запису в основний лист + БЕКАП
 def save_to_sheets(row_data):
     client = get_google_sheet_client()
     if not client: return False
@@ -102,13 +101,13 @@ def save_to_sheets(row_data):
     try:
         spreadsheet = client.open("Sales Leads")
         
-        # 1. Основний лист (sheet1)
+        # 1. Основний лист
         main_sheet = spreadsheet.sheet1
-        
-        # Заголовки
         expected_headers = list(row_data.keys())
+        
         if main_sheet.row_count > 0:
             existing_headers = main_sheet.row_values(1)
+            # Якщо заголовки "поїхали" - перезаписуємо
             if not existing_headers or existing_headers[0] != "Company":
                  main_sheet.clear()
                  main_sheet.append_row(expected_headers)
@@ -117,7 +116,7 @@ def save_to_sheets(row_data):
             
         main_sheet.append_row(list(row_data.values()))
         
-        # 2. БЕКАП ЛИСТ (Створюємо, якщо немає)
+        # 2. Бекап
         try:
             backup_sheet = spreadsheet.worksheet("Backup_Logs")
         except gspread.exceptions.WorksheetNotFound:
@@ -156,7 +155,7 @@ def process_data(api_key, image_bytes, audio_file, user_text):
     """
     
     content = [system_instruction]
-    if user_text: content.append(f"User Note: {user_text}")
+    if user_text: content.append(f"User Note / Company Name: {user_text}")
     if image_bytes: content.append(Image.open(io.BytesIO(image_bytes)))
     if audio_file: content.append({"mime_type": "audio/wav", "data": audio_file.read()})
 
@@ -213,8 +212,15 @@ if st.button(t('btn_submit'), type="primary", use_container_width=True):
                 result = process_data(api_key, final_image_bytes, audio_val, company_text)
                 timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 
+                # --- ВИПРАВЛЕННЯ ЛОГІКИ НАЗВИ ---
+                # Якщо користувач щось ввів -> беремо це.
+                # Якщо не ввів -> беремо те, що знайшов AI.
+                # Якщо і AI не знайшов -> "No Name".
+                ai_company = result.get("company_name", "").strip()
+                final_company_name = company_text if company_text else (ai_company if ai_company else "No Name")
+                
                 row_data = {
-                    "Company": result.get("company_name", company_text),
+                    "Company": final_company_name,
                     "Contact": result.get("contact_person", ""),
                     "Position": result.get("position", ""),
                     "Email": result.get("email", ""),
@@ -225,10 +231,9 @@ if st.button(t('btn_submit'), type="primary", use_container_width=True):
                     "Timestamp": timestamp
                 }
 
-                # 2. Запис в Google Sheets (+ Backup)
+                # 2. Запис
                 if save_to_sheets(row_data):
                     st.success(t('success'))
-                    # Оновлюємо історію
                     st.session_state['history'] = load_history()
                 
             except Exception as e:
@@ -246,6 +251,7 @@ with col_hist2:
 
 if st.session_state['history']:
     for item in st.session_state['history']:
+        # Безпечне отримання даних для відображення
         comp = item.get('Company') or "No Name"
         contact = item.get('Contact') or ""
         time = item.get('Timestamp') or ""
