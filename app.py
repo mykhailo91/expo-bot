@@ -13,7 +13,6 @@ st.set_page_config(page_title="Expo AI", page_icon="🚀", layout="centered")
 
 MODEL_NAME = "gemini-2.5-pro"
 
-# Ініціалізація змінних
 if 'language' not in st.session_state:
     st.session_state['language'] = 'uk'
 
@@ -34,10 +33,10 @@ translations = {
         'btn_submit': "📤 Обробити та відправити",
         'warning_nodata': "⚠️ Немає даних для відправки!",
         'processing': "⏳ Обробка...",
-        'success': "✅ Успішно! Записано в таблицю.",
+        'success': "✅ Успішно! Записано в таблицю (+Backup).",
         'history_header': "🗂️ Історія записів (з Google Таблиці)",
-        'no_history': "Історія пуста або не завантажилась.",
-        'loading_history': "🔄 Завантажую історію з таблиці..."
+        'no_history': "Історія пуста.",
+        'loading_error': "⚠️ Не вдалося завантажити історію."
     },
     'en': {
         'title': "🚀 Expo AI Assistant",
@@ -54,10 +53,10 @@ translations = {
         'btn_submit': "📤 Process & Send",
         'warning_nodata': "⚠️ No data to send!",
         'processing': "⏳ Processing...",
-        'success': "✅ Success! Saved to sheet.",
+        'success': "✅ Success! Saved to sheet (+Backup).",
         'history_header': "🗂️ Record History (from Google Sheet)",
-        'no_history': "History is empty or failed to load.",
-        'loading_history': "🔄 Loading history from sheet..."
+        'no_history': "History is empty.",
+        'loading_error': "⚠️ Failed to load history."
     }
 }
 
@@ -66,7 +65,6 @@ def t(key):
 
 # --- 3. ФУНКЦІЇ ---
 
-# Кешуємо підключення, щоб не логінитись щоразу
 @st.cache_resource
 def get_google_sheet_client():
     try:
@@ -74,33 +72,64 @@ def get_google_sheet_client():
         if not creds_json_str and "GOOGLE_CREDENTIALS" in st.secrets:
              creds_json_str = st.secrets["GOOGLE_CREDENTIALS"]
         
-        if not creds_json_str:
-            return None
+        if not creds_json_str: return None
 
         creds_dict = json.loads(creds_json_str)
-        scopes = [
-            "https://www.googleapis.com/auth/spreadsheets",
-            "https://www.googleapis.com/auth/drive"
-        ]
+        scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
         client = gspread.authorize(creds)
         return client
-    except Exception as e:
+    except Exception:
         return None
 
-# Функція завантаження історії (НОВА)
 def load_history():
+    """Завантажує історію з таблиці."""
     client = get_google_sheet_client()
     if not client: return []
     
     try:
         sheet = client.open("Sales Leads").sheet1
-        # Отримуємо всі записи як список словників
         records = sheet.get_all_records()
-        # Розвертаємо, щоб нові були зверху
         return list(reversed(records))
-    except Exception:
+    except Exception as e:
         return []
+
+# Функція запису в основний лист + БЕКАП
+def save_to_sheets(row_data):
+    client = get_google_sheet_client()
+    if not client: return False
+
+    try:
+        spreadsheet = client.open("Sales Leads")
+        
+        # 1. Основний лист (sheet1)
+        main_sheet = spreadsheet.sheet1
+        
+        # Заголовки
+        expected_headers = list(row_data.keys())
+        if main_sheet.row_count > 0:
+            existing_headers = main_sheet.row_values(1)
+            if not existing_headers or existing_headers[0] != "Company":
+                 main_sheet.clear()
+                 main_sheet.append_row(expected_headers)
+        else:
+            main_sheet.append_row(expected_headers)
+            
+        main_sheet.append_row(list(row_data.values()))
+        
+        # 2. БЕКАП ЛИСТ (Створюємо, якщо немає)
+        try:
+            backup_sheet = spreadsheet.worksheet("Backup_Logs")
+        except gspread.exceptions.WorksheetNotFound:
+            backup_sheet = spreadsheet.add_worksheet(title="Backup_Logs", rows="1000", cols="20")
+            backup_sheet.append_row(expected_headers)
+            
+        backup_sheet.append_row(list(row_data.values()))
+        
+        return True
+    except Exception as e:
+        st.error(f"Save Error: {e}")
+        return False
 
 def process_data(api_key, image_bytes, audio_file, user_text):
     genai.configure(api_key=api_key)
@@ -136,10 +165,8 @@ def process_data(api_key, image_bytes, audio_file, user_text):
 
 # --- 4. ІНТЕРФЕЙС ---
 
-# Завантаження історії при старті (якщо ще немає в сесії)
-if 'history' not in st.session_state:
-    with st.spinner(t('loading_history')):
-        st.session_state['history'] = load_history()
+if 'history' not in st.session_state or not st.session_state['history']:
+    st.session_state['history'] = load_history()
 
 col_head1, col_head2 = st.columns([3, 1])
 with col_head1: st.title(t('title'))
@@ -186,9 +213,7 @@ if st.button(t('btn_submit'), type="primary", use_container_width=True):
                 result = process_data(api_key, final_image_bytes, audio_val, company_text)
                 timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 
-                # Підготовка запису для таблиці
                 row_data = {
-                    "Timestamp": timestamp,
                     "Company": result.get("company_name", company_text),
                     "Contact": result.get("contact_person", ""),
                     "Position": result.get("position", ""),
@@ -196,28 +221,15 @@ if st.button(t('btn_submit'), type="primary", use_container_width=True):
                     "Phone": result.get("phone", ""),
                     "Sentiment": result.get("sentiment", ""),
                     "Summary": result.get("summary", ""),
-                    "Next Steps": result.get("next_steps", "")
+                    "Next Steps": result.get("next_steps", ""),
+                    "Timestamp": timestamp
                 }
 
-                # 2. Запис в Google Sheets
-                client = get_google_sheet_client()
-                if client:
-                    try:
-                        sheet = client.open("Sales Leads").sheet1
-                        # Якщо таблиця пуста - додаємо заголовки
-                        if not sheet.get_values():
-                            sheet.append_row(list(row_data.keys()))
-                        
-                        sheet.append_row(list(row_data.values()))
-                        st.success(t('success'))
-                        
-                        # 3. Оновлюємо локальну історію (додаємо новий запис на початок)
-                        # Але оскільки ми хочемо точно те, що в таблиці - 
-                        # краще просто додати цей об'єкт в сесію
-                        st.session_state['history'].insert(0, row_data)
-                        
-                    except Exception as e:
-                        st.error(f"Sheet Error: {e}")
+                # 2. Запис в Google Sheets (+ Backup)
+                if save_to_sheets(row_data):
+                    st.success(t('success'))
+                    # Оновлюємо історію
+                    st.session_state['history'] = load_history()
                 
             except Exception as e:
                 st.error(f"General Error: {e}")
@@ -234,18 +246,17 @@ with col_hist2:
 
 if st.session_state['history']:
     for item in st.session_state['history']:
-        # Адаптуємо ключі, бо gspread повертає те, що в заголовку таблиці (наприклад "Company")
-        # А JSON від AI дає "company_name".
-        # Шукаємо назву в різних варіантах ключів
-        comp = item.get('Company') or item.get('company_name') or "Record"
-        contact = item.get('Contact') or item.get('contact_person') or ""
-        time = item.get('Timestamp') or item.get('timestamp') or ""
+        comp = item.get('Company') or "No Name"
+        contact = item.get('Contact') or ""
+        time = item.get('Timestamp') or ""
+        summary = item.get('Summary') or ""
+        next_steps = item.get('Next Steps') or ""
         
-        with st.expander(f"🏢 {comp} - {contact} ({time})"):
-            st.write(f"**Email:** {item.get('Email') or item.get('email')}")
-            st.write(f"**Phone:** {item.get('Phone') or item.get('phone')}")
-            st.write(f"**Sentiment:** {item.get('Sentiment') or item.get('sentiment')}")
-            st.info(f"**Summary:** {item.get('Summary') or item.get('summary')}")
-            st.warning(f"**Next Steps:** {item.get('Next Steps') or item.get('next_steps')}")
+        with st.expander(f"🏢 {comp} ({time})"):
+            if contact: st.write(f"👤 **{contact}** ({item.get('Position')})")
+            st.write(f"📞 {item.get('Phone')} | 📧 {item.get('Email')}")
+            st.write(f"🌡️ {item.get('Sentiment')}")
+            st.info(summary)
+            if next_steps: st.warning(f"⚡ {next_steps}")
 else:
     st.info(t('no_history'))
