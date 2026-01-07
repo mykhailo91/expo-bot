@@ -1,0 +1,6 @@
+streamlit>=1.40.0
+google-generativeai
+gspread
+oauth2client
+python-dotenv
+Pillow
