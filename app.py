@@ -20,6 +20,10 @@ if 'language' not in st.session_state:
 translations = {
     'uk': {
         'title': "🚀 Expo AI Асистент",
+        'setup_title': "🔑 Авторизація",
+        'setup_desc': "Введіть ваш особистий Gemini API Key для роботи.",
+        'label_gemini': "Ваш Gemini API Key:",
+        'setup_warning': "Ключ діє лише поки відкрито цю вкладку.",
         'lang_label': "Мова",
         'input_company_label': "🏢 Назва компанії",
         'input_company_placeholder': "Введіть назву (Пріоритетне поле)",
@@ -33,13 +37,18 @@ translations = {
         'btn_submit': "📤 Обробити та відправити",
         'warning_nodata': "⚠️ Немає даних для відправки!",
         'processing': "⏳ Обробка...",
-        'success': "✅ Успішно! Записано в таблицю (+Backup).",
-        'history_header': "🗂️ Історія записів (з Google Таблиці)",
+        'success': "✅ Успішно! Записано в загальну таблицю.",
+        'history_header': "🗂️ Останні записи (Загальні)",
         'no_history': "Історія пуста.",
-        'loading_error': "⚠️ Не вдалося завантажити історію."
+        'auth_error_sidebar': "⚠️ Введіть API Key зліва!",
+        'server_auth_error': "❌ Помилка на сервері: Немає доступу до Google Sheets. Перевірте Render Environment Variables."
     },
     'en': {
         'title': "🚀 Expo AI Assistant",
+        'setup_title': "🔑 Authorization",
+        'setup_desc': "Enter your personal Gemini API Key to start.",
+        'label_gemini': "Your Gemini API Key:",
+        'setup_warning': "Key is valid only for this session.",
         'lang_label': "Language",
         'input_company_label': "🏢 Company Name",
         'input_company_placeholder': "Enter name (Priority field)",
@@ -53,10 +62,11 @@ translations = {
         'btn_submit': "📤 Process & Send",
         'warning_nodata': "⚠️ No data to send!",
         'processing': "⏳ Processing...",
-        'success': "✅ Success! Saved to sheet (+Backup).",
-        'history_header': "🗂️ Record History (from Google Sheet)",
+        'success': "✅ Success! Saved to shared sheet.",
+        'history_header': "🗂️ Recent Records (Shared)",
         'no_history': "History is empty.",
-        'loading_error': "⚠️ Failed to load history."
+        'auth_error_sidebar': "⚠️ Enter API Key in sidebar!",
+        'server_auth_error': "❌ Server Error: No Google Sheets access. Check Render Environment Variables."
     }
 }
 
@@ -65,9 +75,11 @@ def t(key):
 
 # --- 3. ФУНКЦІЇ ---
 
+# Підключення до Google Sheets (Беремо ключі з СЕРВЕРА Render)
 @st.cache_resource
 def get_google_sheet_client():
     try:
+        # Шукаємо JSON у змінних середовища Render
         creds_json_str = os.environ.get("GOOGLE_CREDENTIALS")
         if not creds_json_str and "GOOGLE_CREDENTIALS" in st.secrets:
              creds_json_str = st.secrets["GOOGLE_CREDENTIALS"]
@@ -83,15 +95,14 @@ def get_google_sheet_client():
         return None
 
 def load_history():
-    """Завантажує історію з таблиці."""
+    """Завантажує історію із ЗАГАЛЬНОЇ таблиці."""
     client = get_google_sheet_client()
     if not client: return []
-    
     try:
         sheet = client.open("Sales Leads").sheet1
         records = sheet.get_all_records()
         return list(reversed(records))
-    except Exception as e:
+    except Exception:
         return []
 
 def save_to_sheets(row_data):
@@ -107,7 +118,6 @@ def save_to_sheets(row_data):
         
         if main_sheet.row_count > 0:
             existing_headers = main_sheet.row_values(1)
-            # Якщо заголовки "поїхали" - перезаписуємо
             if not existing_headers or existing_headers[0] != "Company":
                  main_sheet.clear()
                  main_sheet.append_row(expected_headers)
@@ -130,8 +140,9 @@ def save_to_sheets(row_data):
         st.error(f"Save Error: {e}")
         return False
 
-def process_data(api_key, image_bytes, audio_file, user_text):
-    genai.configure(api_key=api_key)
+def process_data(user_api_key, image_bytes, audio_file, user_text):
+    # Використовуємо ключ, який ввів ЮЗЕР
+    genai.configure(api_key=user_api_key)
     try:
         model = genai.GenerativeModel(MODEL_NAME)
     except:
@@ -164,58 +175,76 @@ def process_data(api_key, image_bytes, audio_file, user_text):
 
 # --- 4. ІНТЕРФЕЙС ---
 
-if 'history' not in st.session_state or not st.session_state['history']:
-    st.session_state['history'] = load_history()
-
-col_head1, col_head2 = st.columns([3, 1])
-with col_head1: st.title(t('title'))
-with col_head2:
-    lang = st.radio(t('lang_label'), ['UA', 'EN'], index=0 if st.session_state['language']=='uk' else 1, horizontal=True, label_visibility="collapsed")
+# Сайдбар для API ключа ЮЗЕРА
+with st.sidebar:
+    st.header(t('setup_title'))
+    user_gemini_key = st.text_input(t('label_gemini'), type="password", help="Get it at aistudio.google.com")
+    st.caption(t('setup_warning'))
+    
+    st.divider()
+    
+    # Перемикач мови
+    lang = st.radio(t('lang_label'), ['UA', 'EN'], index=0 if st.session_state['language']=='uk' else 1)
     if (lang == 'UA' and st.session_state['language'] != 'uk'): st.session_state['language'] = 'uk'; st.rerun()
     elif (lang == 'EN' and st.session_state['language'] != 'en'): st.session_state['language'] = 'en'; st.rerun()
 
+# Перевірка: чи працює серверний доступ до таблиць?
+if not get_google_sheet_client():
+    st.error(t('server_auth_error'))
+    st.stop()
+
+# Перевірка: чи ввів юзер ключ?
+if not user_gemini_key:
+    st.title(t('title'))
+    st.warning(t('auth_error_sidebar'))
+    # Завантажуємо історію навіть без ключа, щоб просто подивитися
+    if 'history' not in st.session_state:
+        st.session_state['history'] = load_history()
+else:
+    # Якщо ключ є і історії ще немає - вантажимо
+    if 'history' not in st.session_state:
+        st.session_state['history'] = load_history()
+
+col_head1, col_head2 = st.columns([3, 1])
+with col_head1: st.title(t('title'))
+
 st.divider()
 
+# Якщо ключа немає - блокуємо інтерфейс вводу
+disabled_state = not user_gemini_key
+
 # Ввід даних
-company_text = st.text_input(t('input_company_label'), placeholder=t('input_company_placeholder'))
+company_text = st.text_input(t('input_company_label'), placeholder=t('input_company_placeholder'), disabled=disabled_state)
 st.write("")
 
-method = st.radio(t('photo_method_label'), [t('method_upload'), t('method_camera')], horizontal=True)
+method = st.radio(t('photo_method_label'), [t('method_upload'), t('method_camera')], horizontal=True, disabled=disabled_state)
 final_image_bytes = None
 
-if method == t('method_camera'):
-    cam_file = st.camera_input(t('cam_label'))
-    if cam_file: final_image_bytes = cam_file.getvalue()
-else:
-    up_file = st.file_uploader(t('upload_label'), type=['jpg', 'png', 'jpeg'])
-    if up_file: 
-        final_image_bytes = up_file.getvalue()
-        st.image(up_file, width=200)
+if not disabled_state:
+    if method == t('method_camera'):
+        cam_file = st.camera_input(t('cam_label'))
+        if cam_file: final_image_bytes = cam_file.getvalue()
+    else:
+        up_file = st.file_uploader(t('upload_label'), type=['jpg', 'png', 'jpeg'])
+        if up_file: 
+            final_image_bytes = up_file.getvalue()
+            st.image(up_file, width=200)
 
 st.write("")
 st.subheader(t('audio_header'))
-audio_val = st.audio_input(t('audio_label'))
+audio_val = st.audio_input(t('audio_label')) # Audio input doesn't support disabled yet in all versions, but logic blocks it
 st.divider()
 
-if st.button(t('btn_submit'), type="primary", use_container_width=True):
+if st.button(t('btn_submit'), type="primary", use_container_width=True, disabled=disabled_state):
     if not any([company_text, final_image_bytes, audio_val]):
         st.warning(t('warning_nodata'))
     else:
-        api_key = os.environ.get("GEMINI_API_KEY")
-        if not api_key and "GEMINI_API_KEY" in st.secrets: api_key = st.secrets["GEMINI_API_KEY"]
-        
-        if not api_key: st.error("API Key Error"); st.stop()
-
         with st.spinner(t('processing')):
             try:
-                # 1. AI Обробка
-                result = process_data(api_key, final_image_bytes, audio_val, company_text)
+                # 1. AI Обробка (Ключ Юзера)
+                result = process_data(user_gemini_key, final_image_bytes, audio_val, company_text)
                 timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 
-                # --- ВИПРАВЛЕННЯ ЛОГІКИ НАЗВИ ---
-                # Якщо користувач щось ввів -> беремо це.
-                # Якщо не ввів -> беремо те, що знайшов AI.
-                # Якщо і AI не знайшов -> "No Name".
                 ai_company = result.get("company_name", "").strip()
                 final_company_name = company_text if company_text else (ai_company if ai_company else "No Name")
                 
@@ -231,19 +260,18 @@ if st.button(t('btn_submit'), type="primary", use_container_width=True):
                     "Timestamp": timestamp
                 }
 
-                # 2. Запис
+                # 2. Запис (Ключ Сервера)
                 if save_to_sheets(row_data):
                     st.success(t('success'))
                     st.session_state['history'] = load_history()
                 
             except Exception as e:
-                st.error(f"General Error: {e}")
+                st.error(f"Error: {e}. Check your API Key.")
 
-# --- 5. ВІДОБРАЖЕННЯ ІСТОРІЇ ---
+# --- ІСТОРІЯ ---
 st.write("---")
 col_hist1, col_hist2 = st.columns([3,1])
-with col_hist1:
-    st.subheader(t('history_header'))
+with col_hist1: st.subheader(t('history_header'))
 with col_hist2:
     if st.button("🔄 Reload"):
         st.session_state['history'] = load_history()
@@ -251,18 +279,10 @@ with col_hist2:
 
 if st.session_state['history']:
     for item in st.session_state['history']:
-        # Безпечне отримання даних для відображення
         comp = item.get('Company') or "No Name"
-        contact = item.get('Contact') or ""
         time = item.get('Timestamp') or ""
-        summary = item.get('Summary') or ""
-        next_steps = item.get('Next Steps') or ""
-        
         with st.expander(f"🏢 {comp} ({time})"):
-            if contact: st.write(f"👤 **{contact}** ({item.get('Position')})")
             st.write(f"📞 {item.get('Phone')} | 📧 {item.get('Email')}")
-            st.write(f"🌡️ {item.get('Sentiment')}")
-            st.info(summary)
-            if next_steps: st.warning(f"⚡ {next_steps}")
+            st.info(item.get('Summary'))
 else:
     st.info(t('no_history'))
