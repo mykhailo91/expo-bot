@@ -1,7 +1,7 @@
 import streamlit as st
 import google.generativeai as genai
 import gspread
-from google.oauth2.service_account import Credentials # Нова бібліотека авторизації
+from google.oauth2.service_account import Credentials
 from PIL import Image
 import json
 import os
@@ -11,19 +11,17 @@ import io
 # --- 1. НАЛАШТУВАННЯ ---
 st.set_page_config(page_title="Expo AI", page_icon="🚀", layout="centered")
 
-MODEL_NAME = "gemini-2.5-pro"
+MODEL_NAME = "gemini-1.5-flash"
 
-# Ініціалізація стану
+# Ініціалізація змінних
 if 'language' not in st.session_state:
     st.session_state['language'] = 'uk'
-if 'history' not in st.session_state:
-    st.session_state['history'] = []
 
 # --- 2. СЛОВНИК ПЕРЕКЛАДІВ ---
 translations = {
     'uk': {
         'title': "🚀 Expo AI Асистент",
-        'lang_label': "Мова / Language",
+        'lang_label': "Мова",
         'input_company_label': "🏢 Назва компанії",
         'input_company_placeholder': "Введіть назву",
         'photo_method_label': "📸 Фото візитки",
@@ -37,14 +35,13 @@ translations = {
         'warning_nodata': "⚠️ Немає даних для відправки!",
         'processing': "⏳ Обробка...",
         'success': "✅ Успішно! Записано в таблицю.",
-        'sheet_connect_error': "Помилка підключення до таблиці (Credentials).",
-        'sheet_not_found': "❌ Таблицю 'Sales Leads' не знайдено! Перевірте назву.",
-        'history_header': "🗂️ Історія сесії",
-        'no_history': "Поки що пусто."
+        'history_header': "🗂️ Історія записів (з Google Таблиці)",
+        'no_history': "Історія пуста або не завантажилась.",
+        'loading_history': "🔄 Завантажую історію з таблиці..."
     },
     'en': {
         'title': "🚀 Expo AI Assistant",
-        'lang_label': "Language / Мова",
+        'lang_label': "Language",
         'input_company_label': "🏢 Company Name",
         'input_company_placeholder': "Enter name",
         'photo_method_label': "📸 Business Card Photo",
@@ -58,10 +55,9 @@ translations = {
         'warning_nodata': "⚠️ No data to send!",
         'processing': "⏳ Processing...",
         'success': "✅ Success! Saved to sheet.",
-        'sheet_connect_error': "Sheet connection error (Credentials).",
-        'sheet_not_found': "❌ Sheet 'Sales Leads' not found! Check the name.",
-        'history_header': "🗂️ Session History",
-        'no_history': "No records yet."
+        'history_header': "🗂️ Record History (from Google Sheet)",
+        'no_history': "History is empty or failed to load.",
+        'loading_history': "🔄 Loading history from sheet..."
     }
 }
 
@@ -70,39 +66,48 @@ def t(key):
 
 # --- 3. ФУНКЦІЇ ---
 
+# Кешуємо підключення, щоб не логінитись щоразу
+@st.cache_resource
 def get_google_sheet_client():
     try:
-        # Отримуємо JSON з секретів
         creds_json_str = os.environ.get("GOOGLE_CREDENTIALS")
         if not creds_json_str and "GOOGLE_CREDENTIALS" in st.secrets:
              creds_json_str = st.secrets["GOOGLE_CREDENTIALS"]
         
         if not creds_json_str:
-            st.error("❌ Немає ключів доступу (GOOGLE_CREDENTIALS).")
             return None
 
         creds_dict = json.loads(creds_json_str)
-        
-        # НОВІ ПРАВИЛЬНІ SCOPES (для gspread v6+)
         scopes = [
             "https://www.googleapis.com/auth/spreadsheets",
             "https://www.googleapis.com/auth/drive"
         ]
-        
-        # Використовуємо нову бібліотеку google.oauth2
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
         client = gspread.authorize(creds)
         return client
     except Exception as e:
-        st.error(f"{t('sheet_connect_error')} {e}")
         return None
+
+# Функція завантаження історії (НОВА)
+def load_history():
+    client = get_google_sheet_client()
+    if not client: return []
+    
+    try:
+        sheet = client.open("Sales Leads").sheet1
+        # Отримуємо всі записи як список словників
+        records = sheet.get_all_records()
+        # Розвертаємо, щоб нові були зверху
+        return list(reversed(records))
+    except Exception:
+        return []
 
 def process_data(api_key, image_bytes, audio_file, user_text):
     genai.configure(api_key=api_key)
     try:
         model = genai.GenerativeModel(MODEL_NAME)
     except:
-        model = genai.GenerativeModel("gemini-2.5-pro")
+        model = genai.GenerativeModel("gemini-1.5-flash-latest")
 
     system_instruction = """
     You are an AI Sales Assistant.
@@ -131,10 +136,11 @@ def process_data(api_key, image_bytes, audio_file, user_text):
 
 # --- 4. ІНТЕРФЕЙС ---
 
-# Сайдбар для технічної інформації (щоб переконатися, що все оновилося)
-with st.sidebar:
-    st.caption(f"v: gspread {gspread.__version__}")
-    
+# Завантаження історії при старті (якщо ще немає в сесії)
+if 'history' not in st.session_state:
+    with st.spinner(t('loading_history')):
+        st.session_state['history'] = load_history()
+
 col_head1, col_head2 = st.columns([3, 1])
 with col_head1: st.title(t('title'))
 with col_head2:
@@ -144,6 +150,7 @@ with col_head2:
 
 st.divider()
 
+# Ввід даних
 company_text = st.text_input(t('input_company_label'), placeholder=t('input_company_placeholder'))
 st.write("")
 
@@ -175,50 +182,70 @@ if st.button(t('btn_submit'), type="primary", use_container_width=True):
 
         with st.spinner(t('processing')):
             try:
-                # 1. AI
+                # 1. AI Обробка
                 result = process_data(api_key, final_image_bytes, audio_val, company_text)
                 timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                result['timestamp'] = timestamp
-                if company_text: result['company_name'] = company_text
                 
-                # 2. Локальне збереження
-                st.session_state['history'].insert(0, result)
+                # Підготовка запису для таблиці
+                row_data = {
+                    "Timestamp": timestamp,
+                    "Company": result.get("company_name", company_text),
+                    "Contact": result.get("contact_person", ""),
+                    "Position": result.get("position", ""),
+                    "Email": result.get("email", ""),
+                    "Phone": result.get("phone", ""),
+                    "Sentiment": result.get("sentiment", ""),
+                    "Summary": result.get("summary", ""),
+                    "Next Steps": result.get("next_steps", "")
+                }
 
-                # 3. Таблиця
+                # 2. Запис в Google Sheets
                 client = get_google_sheet_client()
                 if client:
                     try:
                         sheet = client.open("Sales Leads").sheet1
+                        # Якщо таблиця пуста - додаємо заголовки
                         if not sheet.get_values():
-                            sheet.append_row(["Timestamp", "Company", "Contact", "Position", "Email", "Phone", "Sentiment", "Summary", "Next Steps"])
+                            sheet.append_row(list(row_data.keys()))
                         
-                        row = [
-                            timestamp,
-                            result.get("company_name", ""),
-                            result.get("contact_person", ""),
-                            result.get("position", ""),
-                            result.get("email", ""),
-                            result.get("phone", ""),
-                            result.get("sentiment", ""),
-                            result.get("summary", ""),
-                            result.get("next_steps", "")
-                        ]
-                        sheet.append_row(row)
-                        st.success(t('success')) # Якщо дійшли сюди - все точно ок
-                    except gspread.exceptions.SpreadsheetNotFound:
-                         st.error(t('sheet_not_found'))
+                        sheet.append_row(list(row_data.values()))
+                        st.success(t('success'))
+                        
+                        # 3. Оновлюємо локальну історію (додаємо новий запис на початок)
+                        # Але оскільки ми хочемо точно те, що в таблиці - 
+                        # краще просто додати цей об'єкт в сесію
+                        st.session_state['history'].insert(0, row_data)
+                        
                     except Exception as e:
-                        st.error(f"Sheet Error Details: {e}")
+                        st.error(f"Sheet Error: {e}")
                 
             except Exception as e:
                 st.error(f"General Error: {e}")
 
+# --- 5. ВІДОБРАЖЕННЯ ІСТОРІЇ ---
 st.write("---")
-st.subheader(t('history_header'))
+col_hist1, col_hist2 = st.columns([3,1])
+with col_hist1:
+    st.subheader(t('history_header'))
+with col_hist2:
+    if st.button("🔄 Reload"):
+        st.session_state['history'] = load_history()
+        st.rerun()
+
 if st.session_state['history']:
     for item in st.session_state['history']:
-        header = item.get('company_name') or item.get('contact_person') or "Record"
-        with st.expander(f"🏢 {header} ({item.get('timestamp')})"):
-            st.json(item)
+        # Адаптуємо ключі, бо gspread повертає те, що в заголовку таблиці (наприклад "Company")
+        # А JSON від AI дає "company_name".
+        # Шукаємо назву в різних варіантах ключів
+        comp = item.get('Company') or item.get('company_name') or "Record"
+        contact = item.get('Contact') or item.get('contact_person') or ""
+        time = item.get('Timestamp') or item.get('timestamp') or ""
+        
+        with st.expander(f"🏢 {comp} - {contact} ({time})"):
+            st.write(f"**Email:** {item.get('Email') or item.get('email')}")
+            st.write(f"**Phone:** {item.get('Phone') or item.get('phone')}")
+            st.write(f"**Sentiment:** {item.get('Sentiment') or item.get('sentiment')}")
+            st.info(f"**Summary:** {item.get('Summary') or item.get('summary')}")
+            st.warning(f"**Next Steps:** {item.get('Next Steps') or item.get('next_steps')}")
 else:
     st.info(t('no_history'))
