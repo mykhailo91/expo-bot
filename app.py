@@ -11,7 +11,7 @@ import io
 # --- 1. НАЛАШТУВАННЯ ---
 st.set_page_config(page_title="Expo AI", page_icon="🚀", layout="centered")
 
-MODEL_NAME = "gemini-1.5-flash"
+MODEL_NAME = "gemini-2.5-pro"
 
 # Ініціалізація стану
 if 'language' not in st.session_state:
@@ -102,7 +102,7 @@ def process_data(api_key, image_bytes, audio_file, user_text):
     try:
         model = genai.GenerativeModel(MODEL_NAME)
     except:
-        model = genai.GenerativeModel("gemini-1.5-flash-latest")
+        model = genai.GenerativeModel("gemini-2.5-pro")
 
     system_instruction = """
     You are an AI Sales Assistant.
