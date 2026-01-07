@@ -1,6 +1,6 @@
 streamlit>=1.40.0
-google-generativeai
-gspread
+google-generativeai>=0.8.3
+gspread>=6.0.0
 oauth2client
 python-dotenv
 Pillow

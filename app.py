@@ -9,53 +9,59 @@ import datetime
 import io
 
 # --- 1. НАЛАШТУВАННЯ ---
-st.set_page_config(page_title="Expo AI Lead", page_icon="🚀", layout="centered")
+st.set_page_config(page_title="Expo AI", page_icon="🚀", layout="centered")
 
-# Використовуємо стабільну модель, щоб уникнути помилок 404
-# Flash ідеальна для аудіо та швидкої відповіді
+# Використовуємо Flash. Завдяки оновленому requirements.txt це запрацює.
 MODEL_NAME = "gemini-1.5-flash"
 
-# Ініціалізація стану (пам'ять сесії)
+# Ініціалізація стану
 if 'language' not in st.session_state:
     st.session_state['language'] = 'uk'
-if 'camera_active' not in st.session_state:
-    st.session_state['camera_active'] = False
-if 'captured_photo' not in st.session_state:
-    st.session_state['captured_photo'] = None
 
 # --- 2. СЛОВНИК ПЕРЕКЛАДІВ ---
+# Тут прописані ВСІ тексти інтерфейсу
 translations = {
     'uk': {
         'title': "🚀 Expo AI Асистент",
-        'lang_select': "Мова / Language:",
-        'input_company': "Назва компанії (введіть вручну, якщо немає візитки)",
-        'btn_open_camera': "📸 Відкрити камеру",
-        'btn_close_camera': "❌ Закрити камеру",
-        'btn_delete_photo': "🗑️ Видалити фото",
+        'lang_label': "Мова / Language",
+        'input_company_label': "🏢 Назва компанії",
+        'input_company_placeholder': "Введіть назву, якщо немає візитки",
+        'photo_method_label': "Як додати фото?",
+        'method_camera': "📸 Відкрити камеру",
+        'method_upload': "📂 Завантажити файл (Швидше)",
         'cam_label': "Зробіть фото",
-        'audio_label': "🎙️ Голосовий фідбек (скажіть враження, AI прибере шум)",
+        'upload_label': "Виберіть фото візитки",
+        'audio_header': "🎤 Голосовий запис",
+        'audio_label': "Натисніть мікрофон та говоріть",
         'btn_submit': "📤 Обробити та відправити",
-        'processing': "⏳ Відправляємо дані в AI та Google Sheets...",
-        'success': "✅ Успішно! Дані в таблиці.",
-        'error_input': "⚠️ Будь ласка, зробіть фото АБО запишіть аудіо АБО введіть назву.",
-        'result_title': "Результат обробки:",
-        'history_title': "Історія сесії"
+        'warning_nodata': "⚠️ Увага: Немає даних для відправки! Додайте фото, звук або назву.",
+        'processing': "⏳ Аналізую візитку та аудіо... Це займе кілька секунд.",
+        'success': "✅ Готово! Дані збережено в таблицю.",
+        'error_title': "Помилка:",
+        'result_header': "Результат обробки:",
+        'settings_api_error': "Помилка API ключа. Перевірте налаштування Render.",
+        'sheet_connect_error': "Помилка підключення до таблиці:"
     },
     'en': {
         'title': "🚀 Expo AI Assistant",
-        'lang_select': "Language / Мова:",
-        'input_company': "Company Name (manual entry if no card)",
-        'btn_open_camera': "📸 Open Camera",
-        'btn_close_camera': "❌ Close Camera",
-        'btn_delete_photo': "🗑️ Delete Photo",
+        'lang_label': "Language / Мова",
+        'input_company_label': "🏢 Company Name",
+        'input_company_placeholder': "Enter name if no card available",
+        'photo_method_label': "Photo Input Method",
+        'method_camera': "📸 Open Camera",
+        'method_upload': "📂 Upload File (Faster)",
         'cam_label': "Take a photo",
-        'audio_label': "🎙️ Voice Feedback (AI will filter background noise)",
+        'upload_label': "Choose business card image",
+        'audio_header': "🎤 Voice Recording",
+        'audio_label': "Press mic and speak",
         'btn_submit': "📤 Process & Send",
-        'processing': "⏳ Sending to AI and Google Sheets...",
-        'success': "✅ Success! Data saved.",
-        'error_input': "⚠️ Please take a photo OR record audio OR enter a name.",
-        'result_title': "Processed Result:",
-        'history_title': "Session History"
+        'warning_nodata': "⚠️ Warning: No data to send! Add photo, audio, or name.",
+        'processing': "⏳ Analyzing card and audio... Please wait.",
+        'success': "✅ Done! Data saved to sheet.",
+        'error_title': "Error:",
+        'result_header': "Processed Result:",
+        'settings_api_error': "API Key Error. Check Render settings.",
+        'sheet_connect_error': "Sheet Connection Error:"
     }
 }
 
@@ -71,7 +77,6 @@ def get_google_sheet_client():
              creds_json_str = st.secrets["GOOGLE_CREDENTIALS"]
         
         if not creds_json_str:
-            st.error("Credential error: No keys found.")
             return None
 
         creds_dict = json.loads(creds_json_str)
@@ -80,30 +85,36 @@ def get_google_sheet_client():
         client = gspread.authorize(creds)
         return client
     except Exception as e:
-        st.error(f"Google Sheets Connection Error: {e}")
+        st.error(f"{t('sheet_connect_error')} {e}")
         return None
 
 def process_data(api_key, image_bytes, audio_file, user_text):
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel(MODEL_NAME) 
+    
+    # Спроба ініціалізації моделі
+    try:
+        model = genai.GenerativeModel(MODEL_NAME)
+    except Exception:
+        # Фоллбек, якщо раптом ім'я не сподобається
+        model = genai.GenerativeModel("gemini-1.5-flash-latest")
 
-    # Промпт для AI
     system_instruction = """
-    Analyze the provided sales meeting data (Audio and/or Image).
-    Context: A busy exhibition.
+    You are an AI Sales Assistant at an exhibition.
+    INPUTS: Business Card (Image) and/or Voice Feedback (Audio).
     
-    1. IMAGE: Extract Company Name, Contact Name, Email, Phone, Position.
-    2. AUDIO: Transcribe user feedback about the meeting. Ignore background noise.
-    3. LANGUAGE: Output the result in the user's interface language (Ukrainian or English).
+    TASK:
+    1. Extract structured data from the image (Name, Company, Email, Phone, Position).
+    2. Transcribe and summarize the audio (ignore background noise).
+    3. IMPORTANT: The Output MUST be in the same language as the User Interface (Ukrainian or English).
     
-    Return pure JSON structure:
+    RETURN JSON:
     {
         "company_name": "string",
         "contact_person": "string",
         "position": "string",
         "email": "string",
         "phone": "string",
-        "summary": "string (details of conversation)",
+        "summary": "string (summary of the conversation)",
         "sentiment": "string (Positive/Neutral/Negative)",
         "next_steps": "string (action items)"
     }
@@ -112,7 +123,7 @@ def process_data(api_key, image_bytes, audio_file, user_text):
     content = [system_instruction]
     
     if user_text:
-        content.append(f"User manual note: {user_text}")
+        content.append(f"User Text Note: {user_text}")
     
     if image_bytes:
         img = Image.open(io.BytesIO(image_bytes))
@@ -122,127 +133,115 @@ def process_data(api_key, image_bytes, audio_file, user_text):
         audio_bytes = audio_file.read()
         content.append({"mime_type": "audio/wav", "data": audio_bytes})
 
-    # Виклик AI
+    # Виклик
     response = model.generate_content(content, generation_config={"response_mime_type": "application/json"})
     return json.loads(response.text)
 
-# --- 4. ІНТЕРФЕЙС (UI) ---
+# --- 4. ІНТЕРФЕЙС ---
 
-# --- Перемикач мови (Зверху) ---
-col_lang1, col_lang2 = st.columns([1, 3])
-with col_lang1:
-    st.write("🌐 Language:")
-with col_lang2:
-    # Використовуємо радіо кнопки горизонтально для швидкого доступу
-    lang_choice = st.radio(
-        "Label hidden", 
-        options=['UA', 'EN'], 
-        index=0 if st.session_state['language'] == 'uk' else 1,
-        horizontal=True,
-        label_visibility="collapsed"
+# --- Перемикач мови ---
+# Використовуємо columns, щоб кнопка була компактною
+col_head1, col_head2 = st.columns([3, 1])
+with col_head1:
+    st.title(t('title'))
+with col_head2:
+    # Radio кнопка працює як перемикач
+    current_lang = st.radio(
+        t('lang_label'), 
+        ['UA', 'EN'], 
+        index=0 if st.session_state['language'] == 'uk' else 1, 
+        label_visibility="collapsed",
+        horizontal=True
     )
-    # Оновлення мови при зміні
-    new_lang = 'uk' if lang_choice == 'UA' else 'en'
-    if new_lang != st.session_state['language']:
-        st.session_state['language'] = new_lang
+    # Оновлення стану
+    selected_lang = 'uk' if current_lang == 'UA' else 'en'
+    if selected_lang != st.session_state['language']:
+        st.session_state['language'] = selected_lang
         st.rerun()
 
-st.title(t('title'))
 st.divider()
 
-# --- Форма вводу ---
+# --- Ввід даних ---
+company_text = st.text_input(t('input_company_label'), placeholder=t('input_company_placeholder'))
 
-# 1. Текст
-company_text = st.text_input("🏢 " + t('input_company'))
+st.write("") # Відступ
 
-# 2. Блок Камери (Керований)
-st.subheader("📷 Фото")
+# --- Фото (Вибір методу) ---
+method = st.radio(t('photo_method_label'), [t('method_upload'), t('method_camera')], horizontal=True)
 
-if st.session_state['captured_photo'] is None:
-    # Якщо фото ще немає
-    if not st.session_state['camera_active']:
-        # Камера вимкнена - показуємо кнопку "Відкрити"
-        if st.button(t('btn_open_camera')):
-            st.session_state['camera_active'] = True
-            st.rerun()
-    else:
-        # Камера увімкнена - показуємо інпут і кнопку "Закрити"
-        col_cam_act1, col_cam_act2 = st.columns([3, 1])
-        with col_cam_act1:
-            img_file_buffer = st.camera_input(t('cam_label'))
-        with col_cam_act2:
-            if st.button(t('btn_close_camera')):
-                st.session_state['camera_active'] = False
-                st.rerun()
-        
-        # Якщо зробили фото
-        if img_file_buffer is not None:
-            st.session_state['captured_photo'] = img_file_buffer.getvalue()
-            st.session_state['camera_active'] = False # Ховаємо камеру після знімку
-            st.rerun()
+final_image_bytes = None
+
+if method == t('method_camera'):
+    # Камера
+    cam_file = st.camera_input(t('cam_label'))
+    if cam_file:
+        final_image_bytes = cam_file.getvalue()
 else:
-    # Фото вже є - показуємо його
-    st.image(st.session_state['captured_photo'], caption="Ready to send", width=300)
-    if st.button(t('btn_delete_photo')):
-        st.session_state['captured_photo'] = None
-        st.rerun()
+    # Завантаження файлу (ШВИДШЕ)
+    up_file = st.file_uploader(t('upload_label'), type=['jpg', 'png', 'jpeg'])
+    if up_file:
+        final_image_bytes = up_file.getvalue()
+        st.image(up_file, width=200)
 
-# 3. Блок Аудіо
-st.subheader("🎤 Аудіо")
+st.write("") # Відступ
+
+# --- Аудіо ---
+st.subheader(t('audio_header'))
 audio_val = st.audio_input(t('audio_label'))
 
 st.divider()
 
-# --- Кнопка відправки ---
+# --- Кнопка ---
 if st.button(t('btn_submit'), type="primary", use_container_width=True):
     
-    # Перевірка: чи є хоч якісь дані
-    has_data = any([company_text, st.session_state['captured_photo'], audio_val])
-    
-    if not has_data:
-        st.warning(t('error_input'))
+    # Перевірка даних
+    if not any([company_text, final_image_bytes, audio_val]):
+        st.warning(t('warning_nodata'))
     else:
+        # Перевірка ключа
         api_key = os.environ.get("GEMINI_API_KEY")
         if not api_key and "GEMINI_API_KEY" in st.secrets:
             api_key = st.secrets["GEMINI_API_KEY"]
             
         if not api_key:
-            st.error("API Key not found. Check settings on Render.")
+            st.error(t('settings_api_error'))
             st.stop()
 
         with st.spinner(t('processing')):
             try:
-                # 1. Обробка AI
-                result = process_data(api_key, st.session_state['captured_photo'], audio_val, company_text)
+                # 1. AI Обробка
+                result = process_data(api_key, final_image_bytes, audio_val, company_text)
                 
-                # 2. Збереження в Google Sheets
+                # 2. Google Sheets
                 client = get_google_sheet_client()
                 if client:
-                    sheet = client.open("Sales Leads").sheet1
-                    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    
-                    # Перевірка на заголовки
-                    if not sheet.get_values():
-                        sheet.append_row(["Time", "Company", "Contact", "Position", "Email", "Phone", "Sentiment", "Summary", "Next Steps"])
-                    
-                    row = [
-                        timestamp,
-                        result.get("company_name", ""),
-                        result.get("contact_person", ""),
-                        result.get("position", ""),
-                        result.get("email", ""),
-                        result.get("phone", ""),
-                        result.get("sentiment", ""),
-                        result.get("summary", ""),
-                        result.get("next_steps", "")
-                    ]
-                    sheet.append_row(row)
-                
+                    try:
+                        sheet = client.open("Sales Leads").sheet1
+                        # Заголовки, якщо треба
+                        if not sheet.get_values():
+                            sheet.append_row(["Timestamp", "Company", "Contact", "Position", "Email", "Phone", "Sentiment", "Summary", "Next Steps"])
+                        
+                        row = [
+                            datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            result.get("company_name", ""),
+                            result.get("contact_person", ""),
+                            result.get("position", ""),
+                            result.get("email", ""),
+                            result.get("phone", ""),
+                            result.get("sentiment", ""),
+                            result.get("summary", ""),
+                            result.get("next_steps", "")
+                        ]
+                        sheet.append_row(row)
+                    except Exception as e:
+                        st.error(f"Sheet Error: {e}")
+
                 st.success(t('success'))
-                st.json(result) # Показуємо результат для перевірки
                 
-                # Очистка після успішної відправки (опціонально, можна прибрати)
-                # st.session_state['captured_photo'] = None
+                # Показати результат
+                st.subheader(t('result_header'))
+                st.json(result)
                 
             except Exception as e:
-                st.error(f"Error: {e}")
+                # Детальний вивід помилки
+                st.error(f"{t('error_title')} {e}")
