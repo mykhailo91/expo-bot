@@ -11,8 +11,11 @@ import io
 # --- 1. НАЛАШТУВАННЯ ---
 st.set_page_config(page_title="Expo AI", page_icon="🚀", layout="centered")
 
+st.write(f"System Info: google-generativeai version: {genai.__version__}")
+st.write("---")
+
 # Використовуємо Flash. Завдяки оновленому requirements.txt це запрацює.
-MODEL_NAME = "gemini-1.5-flash"
+MODEL_NAME = "gemini-1.5-pro"
 
 # Ініціалізація стану
 if 'language' not in st.session_state:
@@ -96,7 +99,7 @@ def process_data(api_key, image_bytes, audio_file, user_text):
         model = genai.GenerativeModel(MODEL_NAME)
     except Exception:
         # Фоллбек, якщо раптом ім'я не сподобається
-        model = genai.GenerativeModel("gemini-1.5-flash-latest")
+        model = genai.GenerativeModel("gemini-1.5-pro")
 
     system_instruction = """
     You are an AI Sales Assistant at an exhibition.
