@@ -8,78 +8,189 @@ import os
 import datetime
 import io
 
-# --- 1. НАЛАШТУВАННЯ ---
+# --- 1. CONFIG & STATE ---
 st.set_page_config(page_title="Expo AI", page_icon="🚀", layout="centered")
 
-MODEL_NAME = "gemini-2.5-pro"
-
+# Ініціалізація стану (Мова та Тема)
 if 'language' not in st.session_state:
     st.session_state['language'] = 'uk'
+if 'theme' not in st.session_state:
+    st.session_state['theme'] = 'dark'
 
-# --- 2. СЛОВНИК ПЕРЕКЛАДІВ ---
+# --- 2. LOCALIZATION ---
 translations = {
     'uk': {
-        'title': "🚀 Expo AI Асистент",
-        'setup_title': "🔑 Авторизація",
-        'setup_desc': "Введіть ваш особистий Gemini API Key для роботи.",
-        'label_gemini': "Ваш Gemini API Key:",
-        'setup_warning': "Ключ діє лише поки відкрито цю вкладку.",
-        'lang_label': "Мова",
-        'input_company_label': "🏢 Назва компанії",
-        'input_company_placeholder': "Введіть назву (Пріоритетне поле)",
-        'photo_method_label': "📸 Фото візитки",
-        'method_camera': "Камера",
-        'method_upload': "Завантажити файл",
-        'cam_label': "Зробіть фото",
-        'upload_label': "Виберіть фото",
-        'audio_header': "🎤 Голосовий запис",
-        'audio_label': "Натисніть мікрофон та говоріть",
-        'btn_submit': "📤 Обробити та відправити",
-        'warning_nodata': "⚠️ Немає даних для відправки!",
-        'processing': "⏳ Обробка...",
-        'success': "✅ Успішно! Записано в загальну таблицю.",
-        'history_header': "🗂️ Останні записи (Загальні)",
+        'title': "Expo AI Асистент",
+        'subtitle': "Capture. Process. Sync.",
+        'setup_title': "Налаштування",
+        'label_gemini': "Gemini API Key",
+        'setup_warning': "Ключ діє лише цю сесію.",
+        'theme_label': "Тема оформлення",
+        'theme_dark': "Темна 🌑",
+        'theme_light': "Світла ☀️",
+        'input_company_placeholder': "Назва компанії (опціонально)",
+        'photo_tab': "📸 Фото",
+        'upload_tab': "📂 Файл",
+        'audio_label': "🎤 Голосовий контекст",
+        'btn_submit': "Обробити ліда",
+        'processing': "Аналіз даних...",
+        'success': "✅ Збережено в таблицю",
+        'history_header': "Останні записи",
         'no_history': "Історія пуста.",
-        'auth_error_sidebar': "⚠️ Введіть API Key зліва!",
-        'server_auth_error': "❌ Помилка на сервері: Немає доступу до Google Sheets. Перевірте Render Environment Variables."
+        'auth_req': "🔒 Потрібна авторизація",
+        'auth_desc': "Введіть API Key у меню зліва для початку роботи.",
+        'server_error': "❌ Помилка сервера: Немає доступу до Google Sheets."
     },
     'en': {
-        'title': "🚀 Expo AI Assistant",
-        'setup_title': "🔑 Authorization",
-        'setup_desc': "Enter your personal Gemini API Key to start.",
-        'label_gemini': "Your Gemini API Key:",
-        'setup_warning': "Key is valid only for this session.",
-        'lang_label': "Language",
-        'input_company_label': "🏢 Company Name",
-        'input_company_placeholder': "Enter name (Priority field)",
-        'photo_method_label': "📸 Business Card Photo",
-        'method_camera': "Camera",
-        'method_upload': "Upload File",
-        'cam_label': "Take a photo",
-        'upload_label': "Choose file",
-        'audio_header': "🎤 Voice Recording",
-        'audio_label': "Press mic and speak",
-        'btn_submit': "📤 Process & Send",
-        'warning_nodata': "⚠️ No data to send!",
-        'processing': "⏳ Processing...",
-        'success': "✅ Success! Saved to shared sheet.",
-        'history_header': "🗂️ Recent Records (Shared)",
+        'title': "Expo AI Assistant",
+        'subtitle': "Capture. Process. Sync.",
+        'setup_title': "Settings",
+        'label_gemini': "Gemini API Key",
+        'setup_warning': "Key is valid for this session only.",
+        'theme_label': "Appearance",
+        'theme_dark': "Dark 🌑",
+        'theme_light': "Light ☀️",
+        'input_company_placeholder': "Company Name (Optional)",
+        'photo_tab': "📸 Photo",
+        'upload_tab': "📂 File",
+        'audio_label': "🎤 Voice Context",
+        'btn_submit': "Process Lead",
+        'processing': "Analyzing...",
+        'success': "✅ Saved to Sheet",
+        'history_header': "Recent Leads",
         'no_history': "History is empty.",
-        'auth_error_sidebar': "⚠️ Enter API Key in sidebar!",
-        'server_auth_error': "❌ Server Error: No Google Sheets access. Check Render Environment Variables."
+        'auth_req': "🔒 Authentication Required",
+        'auth_desc': "Enter your API Key in the sidebar to start.",
+        'server_error': "❌ Server Error: No Google Sheets access."
+    },
+    'de': {
+        'title': "Expo AI Assistent",
+        'subtitle': "Capture. Process. Sync.",
+        'setup_title': "Einstellungen",
+        'label_gemini': "Gemini API Key",
+        'setup_warning': "Schlüssel gilt nur für diese Sitzung.",
+        'theme_label': "Erscheinungsbild",
+        'theme_dark': "Dunkel 🌑",
+        'theme_light': "Hell ☀️",
+        'input_company_placeholder': "Firmenname (Optional)",
+        'photo_tab': "📸 Foto",
+        'upload_tab': "📂 Datei",
+        'audio_label': "🎤 Sprachkontext",
+        'btn_submit': "Lead verarbeiten",
+        'processing': "Verarbeitung...",
+        'success': "✅ In Tabelle gespeichert",
+        'history_header': "Letzte Einträge",
+        'no_history': "Verlauf ist leer.",
+        'auth_req': "🔒 Authentifizierung erforderlich",
+        'auth_desc': "Geben Sie Ihren API-Schlüssel links ein.",
+        'server_error': "❌ Serverfehler: Kein Zugriff auf Google Sheets."
     }
 }
 
 def t(key):
     return translations[st.session_state['language']][key]
 
-# --- 3. ФУНКЦІЇ ---
+# --- 3. DYNAMIC STYLING (CSS) ---
+# Визначаємо кольори залежно від теми
+if st.session_state['theme'] == 'dark':
+    bg_color = "#000000"
+    text_color = "#ffffff"
+    card_bg = "#1c1c1e"
+    input_bg = "#1c1c1e"
+    border_color = "#333333"
+    meta_color = "#b0b0b0"
+else:
+    bg_color = "#ffffff"
+    text_color = "#000000"
+    card_bg = "#f2f2f7" # Apple System Grey
+    input_bg = "#ffffff"
+    border_color = "#d1d1d6"
+    meta_color = "#6e6e73"
 
-# Підключення до Google Sheets (Беремо ключі з СЕРВЕРА Render)
+st.markdown(f"""
+    <style>
+        /* Global Reset */
+        .stApp {{
+            background-color: {bg_color};
+            color: {text_color};
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }}
+        
+        /* Typography */
+        h1, h2, h3, h4 {{
+            font-weight: 600;
+            letter-spacing: -0.5px;
+            color: {text_color} !important;
+        }}
+        p, .stMarkdown, label {{
+            color: {text_color} !important;
+        }}
+        .small-text {{
+            color: {meta_color} !important;
+            font-size: 0.9em;
+        }}
+
+        /* Inputs */
+        .stTextInput > div > div > input, .stTextArea > div > div > textarea {{
+            background-color: {input_bg};
+            color: {text_color};
+            border: 1px solid {border_color};
+            border-radius: 12px;
+            padding: 10px;
+        }}
+        
+        /* Buttons */
+        .stButton > button {{
+            background-color: {text_color}; 
+            color: {bg_color};
+            border-radius: 20px;
+            font-weight: 600;
+            border: none;
+            padding: 12px 24px;
+            transition: opacity 0.2s ease;
+        }}
+        .stButton > button:hover {{
+            opacity: 0.8;
+            border: none;
+            color: {bg_color};
+        }}
+        
+        /* Expanders (History Cards) */
+        .streamlit-expanderHeader {{
+            background-color: {card_bg};
+            border-radius: 12px;
+            border: 1px solid {border_color};
+            color: {text_color};
+        }}
+        .streamlit-expanderContent {{
+            background-color: {card_bg};
+            border-bottom-left-radius: 12px;
+            border-bottom-right-radius: 12px;
+            border: 1px solid {border_color};
+            border-top: none;
+            color: {meta_color};
+        }}
+        
+        /* Audio Input Fix */
+        .stAudioInput {{
+            background-color: {card_bg};
+            border-radius: 12px;
+            padding: 10px;
+            color: {text_color};
+        }}
+
+        /* Hide Streamlit Default Elements */
+        #MainMenu {{visibility: hidden;}}
+        footer {{visibility: hidden;}}
+        header {{visibility: hidden;}}
+    </style>
+""", unsafe_allow_html=True)
+
+# --- 4. CORE LOGIC ---
+
 @st.cache_resource
 def get_google_sheet_client():
     try:
-        # Шукаємо JSON у змінних середовища Render
         creds_json_str = os.environ.get("GOOGLE_CREDENTIALS")
         if not creds_json_str and "GOOGLE_CREDENTIALS" in st.secrets:
              creds_json_str = st.secrets["GOOGLE_CREDENTIALS"]
@@ -141,17 +252,17 @@ def save_to_sheets(row_data):
         return False
 
 def process_data(user_api_key, image_bytes, audio_file, user_text):
-    # Використовуємо ключ, який ввів ЮЗЕР
     genai.configure(api_key=user_api_key)
     try:
         model = genai.GenerativeModel(MODEL_NAME)
     except:
         model = genai.GenerativeModel("gemini-2.5-pro")
 
+    # Оновлений промпт із підтримкою трьох мов
     system_instruction = """
     You are an AI Sales Assistant.
     TASK: Extract structured data.
-    OUTPUT LANGUAGE: Match User Interface Language (UA/EN).
+    OUTPUT LANGUAGE: Match User Interface Language (UA/EN/DE).
     RETURN JSON ONLY:
     {
         "company_name": "string",
@@ -173,75 +284,103 @@ def process_data(user_api_key, image_bytes, audio_file, user_text):
     response = model.generate_content(content, generation_config={"response_mime_type": "application/json"})
     return json.loads(response.text)
 
-# --- 4. ІНТЕРФЕЙС ---
+# --- 5. UI LAYOUT ---
 
-# Сайдбар для API ключа ЮЗЕРА
+# --- SIDEBAR ---
 with st.sidebar:
     st.header(t('setup_title'))
-    user_gemini_key = st.text_input(t('label_gemini'), type="password", help="Get it at aistudio.google.com")
+    
+    # 1. API Key
+    user_gemini_key = st.text_input(t('label_gemini'), type="password")
     st.caption(t('setup_warning'))
     
     st.divider()
     
-    # Перемикач мови
-    lang = st.radio(t('lang_label'), ['UA', 'EN'], index=0 if st.session_state['language']=='uk' else 1)
-    if (lang == 'UA' and st.session_state['language'] != 'uk'): st.session_state['language'] = 'uk'; st.rerun()
-    elif (lang == 'EN' and st.session_state['language'] != 'en'): st.session_state['language'] = 'en'; st.rerun()
+    # 2. Language Selection (UA / EN / DE)
+    lang_map = {'UA': 'uk', 'EN': 'en', 'DE': 'de'}
+    # Визначаємо індекс для radio button
+    curr = st.session_state['language']
+    idx = 0
+    if curr == 'en': idx = 1
+    elif curr == 'de': idx = 2
+    
+    lang_sel = st.radio("Language", ['UA', 'EN', 'DE'], index=idx, horizontal=True)
+    
+    selected_lang_code = lang_map[lang_sel]
+    if st.session_state['language'] != selected_lang_code:
+        st.session_state['language'] = selected_lang_code
+        st.rerun()
+    
+    st.divider()
 
-# Перевірка: чи працює серверний доступ до таблиць?
+    # 3. Theme Toggle
+    theme_sel = st.radio(
+        t('theme_label'), 
+        [t('theme_dark'), t('theme_light')],
+        index=0 if st.session_state['theme'] == 'dark' else 1
+    )
+    new_theme = 'dark' if theme_sel == t('theme_dark') else 'light'
+    if st.session_state['theme'] != new_theme:
+        st.session_state['theme'] = new_theme
+        st.rerun()
+
+# --- MAIN CONTENT ---
+
+MODEL_NAME = "gemini-2.5-pro"
+
+# Header
+st.markdown(f"<h1 style='text-align: center; margin-bottom: 0;'>{t('title')}</h1>", unsafe_allow_html=True)
+st.markdown(f"<p style='text-align: center; opacity: 0.7; margin-bottom: 30px;'>{t('subtitle')}</p>", unsafe_allow_html=True)
+
+# Server Check
 if not get_google_sheet_client():
-    st.error(t('server_auth_error'))
+    st.error(t('server_error'))
     st.stop()
 
-# Перевірка: чи ввів юзер ключ?
-if not user_gemini_key:
-    st.title(t('title'))
-    st.warning(t('auth_error_sidebar'))
-    # Завантажуємо історію навіть без ключа, щоб просто подивитися
+# Auth Check
+disabled_state = not user_gemini_key
+
+if disabled_state:
+    st.info(f"⚠️ {t('auth_req')}: {t('auth_desc')}")
     if 'history' not in st.session_state:
         st.session_state['history'] = load_history()
 else:
-    # Якщо ключ є і історії ще немає - вантажимо
     if 'history' not in st.session_state:
         st.session_state['history'] = load_history()
 
-col_head1, col_head2 = st.columns([3, 1])
-with col_head1: st.title(t('title'))
+# Form Inputs
+col1, col2 = st.columns([1, 1], gap="medium")
 
-st.divider()
-
-# Якщо ключа немає - блокуємо інтерфейс вводу
-disabled_state = not user_gemini_key
-
-# Ввід даних
-company_text = st.text_input(t('input_company_label'), placeholder=t('input_company_placeholder'), disabled=disabled_state)
-st.write("")
-
-method = st.radio(t('photo_method_label'), [t('method_upload'), t('method_camera')], horizontal=True, disabled=disabled_state)
-final_image_bytes = None
-
-if not disabled_state:
-    if method == t('method_camera'):
-        cam_file = st.camera_input(t('cam_label'))
+with col1:
+    company_text = st.text_input("", placeholder=t('input_company_placeholder'), disabled=disabled_state, label_visibility="collapsed")
+    
+    st.markdown("<div style='height: 10px'></div>", unsafe_allow_html=True)
+    
+    tab_cam, tab_up = st.tabs([t('photo_tab'), t('upload_tab')])
+    final_image_bytes = None
+    
+    with tab_cam:
+        cam_file = st.camera_input("Camera", label_visibility="collapsed", disabled=disabled_state)
         if cam_file: final_image_bytes = cam_file.getvalue()
-    else:
-        up_file = st.file_uploader(t('upload_label'), type=['jpg', 'png', 'jpeg'])
-        if up_file: 
-            final_image_bytes = up_file.getvalue()
-            st.image(up_file, width=200)
+        
+    with tab_up:
+        up_file = st.file_uploader("Upload", type=['jpg', 'png', 'jpeg'], label_visibility="collapsed", disabled=disabled_state)
+        if up_file: final_image_bytes = up_file.getvalue()
 
-st.write("")
-st.subheader(t('audio_header'))
-audio_val = st.audio_input(t('audio_label')) # Audio input doesn't support disabled yet in all versions, but logic blocks it
-st.divider()
+with col2:
+    st.markdown(f"<span class='small-text'>{t('audio_label')}</span>", unsafe_allow_html=True)
+    audio_val = st.audio_input("Audio", label_visibility="collapsed")
 
+st.markdown("---")
+
+# Submit Button
 if st.button(t('btn_submit'), type="primary", use_container_width=True, disabled=disabled_state):
     if not any([company_text, final_image_bytes, audio_val]):
-        st.warning(t('warning_nodata'))
+        st.toast("⚠️ No data to send!")
     else:
         with st.spinner(t('processing')):
             try:
-                # 1. AI Обробка (Ключ Юзера)
+                # 1. AI Processing
                 result = process_data(user_gemini_key, final_image_bytes, audio_val, company_text)
                 timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 
@@ -260,29 +399,30 @@ if st.button(t('btn_submit'), type="primary", use_container_width=True, disabled
                     "Timestamp": timestamp
                 }
 
-                # 2. Запис (Ключ Сервера)
+                # 2. Save
                 if save_to_sheets(row_data):
-                    st.success(t('success'))
+                    st.toast(t('success'))
                     st.session_state['history'] = load_history()
                 
             except Exception as e:
-                st.error(f"Error: {e}. Check your API Key.")
+                st.error(f"Error: {e}")
 
-# --- ІСТОРІЯ ---
-st.write("---")
-col_hist1, col_hist2 = st.columns([3,1])
-with col_hist1: st.subheader(t('history_header'))
-with col_hist2:
-    if st.button("🔄 Reload"):
-        st.session_state['history'] = load_history()
-        st.rerun()
+# History Display
+st.markdown(f"<br><h3>{t('history_header')}</h3>", unsafe_allow_html=True)
 
-if st.session_state['history']:
-    for item in st.session_state['history']:
+if st.session_state.get('history'):
+    for item in st.session_state['history'][:10]:
         comp = item.get('Company') or "No Name"
         time = item.get('Timestamp') or ""
-        with st.expander(f"🏢 {comp} ({time})"):
-            st.write(f"📞 {item.get('Phone')} | 📧 {item.get('Email')}")
-            st.info(item.get('Summary'))
+        
+        with st.expander(f"{comp} • {time}"):
+            st.markdown(f"""
+            <div class='small-text'>
+                <b>👤 Contact:</b> {item.get('Contact')} ({item.get('Position')})<br>
+                <b>📞 Info:</b> {item.get('Phone')} | 📧 {item.get('Email')}<br>
+                <b>📝 Summary:</b> {item.get('Summary')}<br>
+                <b>👉 Next:</b> {item.get('Next Steps')}
+            </div>
+            """, unsafe_allow_html=True)
 else:
-    st.info(t('no_history'))
+    st.caption(t('no_history'))
