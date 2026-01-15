@@ -9,420 +9,437 @@ import datetime
 import io
 
 # --- 1. CONFIG & STATE ---
-st.set_page_config(page_title="Expo AI", page_icon="🚀", layout="centered")
+st.set_page_config(page_title="Expo AI", page_icon="✨", layout="wide")
 
-# Ініціалізація стану (Мова та Тема)
-if 'language' not in st.session_state:
-    st.session_state['language'] = 'uk'
-if 'theme' not in st.session_state:
-    st.session_state['theme'] = 'dark'
+# Init State
+if 'language' not in st.session_state: st.session_state['language'] = 'uk'
+if 'theme' not in st.session_state: st.session_state['theme'] = 'dark'
+if 'history' not in st.session_state: st.session_state['history'] = []
 
-# --- 2. LOCALIZATION ---
-translations = {
-    'uk': {
-        'title': "Expo AI Асистент",
-        'subtitle': "Capture. Process. Sync.",
-        'setup_title': "Налаштування",
-        'label_gemini': "Gemini API Key",
-        'setup_warning': "Ключ діє лише цю сесію.",
-        'theme_label': "Тема оформлення",
-        'theme_dark': "Темна 🌑",
-        'theme_light': "Світла ☀️",
-        'input_company_placeholder': "Назва компанії (опціонально)",
-        'photo_tab': "📸 Фото",
-        'upload_tab': "📂 Файл",
-        'audio_label': "🎤 Голосовий контекст",
-        'btn_submit': "Обробити ліда",
-        'processing': "Аналіз даних...",
-        'success': "✅ Збережено в таблицю",
-        'history_header': "Останні записи",
-        'no_history': "Історія пуста.",
-        'auth_req': "🔒 Потрібна авторизація",
-        'auth_desc': "Введіть API Key у меню зліва для початку роботи.",
-        'server_error': "❌ Помилка сервера: Немає доступу до Google Sheets."
+# --- 2. MODERN UI SYSTEM (CSS) ---
+
+# Color Palettes
+THEMES = {
+    "dark": {
+        "bg_gradient": "linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)", # Deep Midnight
+        "sidebar_bg": "#020617",
+        "card_bg": "rgba(30, 41, 59, 0.7)", # Glassy Dark
+        "text_main": "#f8fafc",
+        "text_sub": "#94a3b8",
+        "accent": "#6366f1", # Indigo 500
+        "accent_hover": "#4f46e5",
+        "border": "rgba(148, 163, 184, 0.1)",
+        "input_bg": "rgba(15, 23, 42, 0.6)",
+        "shadow": "0 10px 15px -3px rgba(0, 0, 0, 0.5)"
     },
-    'en': {
-        'title': "Expo AI Assistant",
-        'subtitle': "Capture. Process. Sync.",
-        'setup_title': "Settings",
-        'label_gemini': "Gemini API Key",
-        'setup_warning': "Key is valid for this session only.",
-        'theme_label': "Appearance",
-        'theme_dark': "Dark 🌑",
-        'theme_light': "Light ☀️",
-        'input_company_placeholder': "Company Name (Optional)",
-        'photo_tab': "📸 Photo",
-        'upload_tab': "📂 File",
-        'audio_label': "🎤 Voice Context",
-        'btn_submit': "Process Lead",
-        'processing': "Analyzing...",
-        'success': "✅ Saved to Sheet",
-        'history_header': "Recent Leads",
-        'no_history': "History is empty.",
-        'auth_req': "🔒 Authentication Required",
-        'auth_desc': "Enter your API Key in the sidebar to start.",
-        'server_error': "❌ Server Error: No Google Sheets access."
-    },
-    'de': {
-        'title': "Expo AI Assistent",
-        'subtitle': "Capture. Process. Sync.",
-        'setup_title': "Einstellungen",
-        'label_gemini': "Gemini API Key",
-        'setup_warning': "Schlüssel gilt nur für diese Sitzung.",
-        'theme_label': "Erscheinungsbild",
-        'theme_dark': "Dunkel 🌑",
-        'theme_light': "Hell ☀️",
-        'input_company_placeholder': "Firmenname (Optional)",
-        'photo_tab': "📸 Foto",
-        'upload_tab': "📂 Datei",
-        'audio_label': "🎤 Sprachkontext",
-        'btn_submit': "Lead verarbeiten",
-        'processing': "Verarbeitung...",
-        'success': "✅ In Tabelle gespeichert",
-        'history_header': "Letzte Einträge",
-        'no_history': "Verlauf ist leer.",
-        'auth_req': "🔒 Authentifizierung erforderlich",
-        'auth_desc': "Geben Sie Ihren API-Schlüssel links ein.",
-        'server_error': "❌ Serverfehler: Kein Zugriff auf Google Sheets."
+    "light": {
+        "bg_gradient": "linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)", # Ceramic White
+        "sidebar_bg": "#ffffff",
+        "card_bg": "rgba(255, 255, 255, 0.8)", # Glassy White
+        "text_main": "#0f172a",
+        "text_sub": "#64748b",
+        "accent": "#4f46e5", # Indigo 600
+        "accent_hover": "#4338ca",
+        "border": "rgba(148, 163, 184, 0.2)",
+        "input_bg": "#ffffff",
+        "shadow": "0 10px 25px -5px rgba(0, 0, 0, 0.05)"
     }
 }
 
-def t(key):
-    return translations[st.session_state['language']][key]
-
-# --- 3. DYNAMIC STYLING (CSS) ---
-# Визначаємо кольори залежно від теми
-if st.session_state['theme'] == 'dark':
-    bg_color = "#000000"
-    text_color = "#ffffff"
-    card_bg = "#1c1c1e"
-    input_bg = "#1c1c1e"
-    border_color = "#333333"
-    meta_color = "#b0b0b0"
-else:
-    bg_color = "#ffffff"
-    text_color = "#000000"
-    card_bg = "#f2f2f7" # Apple System Grey
-    input_bg = "#ffffff"
-    border_color = "#d1d1d6"
-    meta_color = "#6e6e73"
+current_theme = THEMES[st.session_state['theme']]
 
 st.markdown(f"""
     <style>
-        /* Global Reset */
+        /* IMPORT FONTS */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+        /* RESET & BASE */
         .stApp {{
-            background-color: {bg_color};
-            color: {text_color};
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-        }}
-        
-        /* Typography */
-        h1, h2, h3, h4 {{
-            font-weight: 600;
-            letter-spacing: -0.5px;
-            color: {text_color} !important;
-        }}
-        p, .stMarkdown, label {{
-            color: {text_color} !important;
-        }}
-        .small-text {{
-            color: {meta_color} !important;
-            font-size: 0.9em;
+            background: {current_theme['bg_gradient']};
+            background-attachment: fixed;
+            font-family: 'Inter', -apple-system, sans-serif;
+            color: {current_theme['text_main']};
         }}
 
-        /* Inputs */
-        .stTextInput > div > div > input, .stTextArea > div > div > textarea {{
-            background-color: {input_bg};
-            color: {text_color};
-            border: 1px solid {border_color};
-            border-radius: 12px;
-            padding: 10px;
-        }}
-        
-        /* Buttons */
-        .stButton > button {{
-            background-color: {text_color}; 
-            color: {bg_color};
-            border-radius: 20px;
-            font-weight: 600;
-            border: none;
-            padding: 12px 24px;
-            transition: opacity 0.2s ease;
-        }}
-        .stButton > button:hover {{
-            opacity: 0.8;
-            border: none;
-            color: {bg_color};
-        }}
-        
-        /* Expanders (History Cards) */
-        .streamlit-expanderHeader {{
-            background-color: {card_bg};
-            border-radius: 12px;
-            border: 1px solid {border_color};
-            color: {text_color};
-        }}
-        .streamlit-expanderContent {{
-            background-color: {card_bg};
-            border-bottom-left-radius: 12px;
-            border-bottom-right-radius: 12px;
-            border: 1px solid {border_color};
-            border-top: none;
-            color: {meta_color};
-        }}
-        
-        /* Audio Input Fix */
-        .stAudioInput {{
-            background-color: {card_bg};
-            border-radius: 12px;
-            padding: 10px;
-            color: {text_color};
-        }}
-
-        /* Hide Streamlit Default Elements */
+        /* HIDE STREAMLIT CHROME */
         #MainMenu {{visibility: hidden;}}
         footer {{visibility: hidden;}}
         header {{visibility: hidden;}}
+        
+        /* LAYOUT OPTIMIZATION */
+        .block-container {{
+            padding-top: 2rem;
+            padding-bottom: 5rem;
+            max-width: 900px; /* Optimal readability width */
+            margin: 0 auto;
+        }}
+
+        /* TYPOGRAPHY */
+        h1, h2, h3 {{
+            color: {current_theme['text_main']} !important;
+            font-weight: 700 !important;
+            letter-spacing: -0.02em;
+        }}
+        p, label, .stMarkdown {{
+            color: {current_theme['text_sub']} !important;
+            font-size: 1rem;
+            line-height: 1.6;
+        }}
+
+        /* INPUT FIELDS - AWARD WINNING STYLE */
+        .stTextInput > div > div > input, 
+        .stTextArea > div > div > textarea {{
+            background-color: {current_theme['input_bg']};
+            color: {current_theme['text_main']};
+            border: 1px solid {current_theme['border']};
+            border-radius: 12px;
+            padding: 12px 16px;
+            font-size: 16px; /* Prevents zoom on iOS */
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.02);
+        }}
+        .stTextInput > div > div > input:focus,
+        .stTextArea > div > div > textarea:focus {{
+            border-color: {current_theme['accent']};
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+            outline: none;
+        }}
+
+        /* BUTTONS - HIGH PERFORMANCE LOOK */
+        .stButton > button {{
+            background: {current_theme['accent']};
+            color: white !important;
+            border: none;
+            border-radius: 12px;
+            padding: 14px 28px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            width: 100%;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+        }}
+        .stButton > button:hover {{
+            background: {current_theme['accent_hover']};
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(79, 70, 229, 0.4);
+        }}
+        .stButton > button:disabled {{
+            opacity: 0.6;
+            transform: none;
+            box-shadow: none;
+        }}
+
+        /* CARDS (EXPANDERS) - GLASSMORPHISM */
+        .streamlit-expanderHeader {{
+            background-color: {current_theme['card_bg']};
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid {current_theme['border']};
+            border-radius: 12px;
+            color: {current_theme['text_main']};
+            font-weight: 500;
+        }}
+        .streamlit-expanderContent {{
+            background-color: transparent;
+            border: 1px solid {current_theme['border']};
+            border-top: none;
+            border-bottom-left-radius: 12px;
+            border-bottom-right-radius: 12px;
+            color: {current_theme['text_sub']};
+            padding: 16px;
+        }}
+
+        /* TABS - SEGMENTED CONTROL STYLE */
+        .stTabs [data-baseweb="tab-list"] {{
+            gap: 8px;
+            background-color: {current_theme['input_bg']};
+            padding: 4px;
+            border-radius: 16px;
+            border: 1px solid {current_theme['border']};
+        }}
+        .stTabs [data-baseweb="tab"] {{
+            height: 40px;
+            border-radius: 12px;
+            background-color: transparent;
+            color: {current_theme['text_sub']};
+            border: none;
+            font-weight: 500;
+            flex: 1; /* Stretch tabs */
+        }}
+        .stTabs [aria-selected="true"] {{
+            background-color: {current_theme['card_bg']};
+            color: {current_theme['accent']};
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }}
+        
+        /* SIDEBAR STYLING */
+        [data-testid="stSidebar"] {{
+            background-color: {current_theme['sidebar_bg']};
+            border-right: 1px solid {current_theme['border']};
+        }}
+        
+        /* CUSTOM ALERTS (TOASTS) */
+        .stToast {{
+            background-color: {current_theme['card_bg']};
+            color: {current_theme['text_main']};
+            border-radius: 12px;
+            border: 1px solid {current_theme['border']};
+        }}
+
+        /* MOBILE OPTIMIZATIONS */
+        @media (max-width: 640px) {{
+            .block-container {{
+                padding-left: 1rem;
+                padding-right: 1rem;
+            }}
+            h1 {{ font-size: 1.8rem !important; }}
+            .stButton > button {{ padding: 12px 20px; }}
+        }}
     </style>
 """, unsafe_allow_html=True)
 
-# --- 4. CORE LOGIC ---
-
-@st.cache_resource
-def get_google_sheet_client():
-    try:
-        creds_json_str = os.environ.get("GOOGLE_CREDENTIALS")
-        if not creds_json_str and "GOOGLE_CREDENTIALS" in st.secrets:
-             creds_json_str = st.secrets["GOOGLE_CREDENTIALS"]
-        
-        if not creds_json_str: return None
-
-        creds_dict = json.loads(creds_json_str)
-        scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-        creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
-        client = gspread.authorize(creds)
-        return client
-    except Exception:
-        return None
-
-def load_history():
-    """Завантажує історію із ЗАГАЛЬНОЇ таблиці."""
-    client = get_google_sheet_client()
-    if not client: return []
-    try:
-        sheet = client.open("Sales Leads").sheet1
-        records = sheet.get_all_records()
-        return list(reversed(records))
-    except Exception:
-        return []
-
-def save_to_sheets(row_data):
-    client = get_google_sheet_client()
-    if not client: return False
-
-    try:
-        spreadsheet = client.open("Sales Leads")
-        
-        # 1. Основний лист
-        main_sheet = spreadsheet.sheet1
-        expected_headers = list(row_data.keys())
-        
-        if main_sheet.row_count > 0:
-            existing_headers = main_sheet.row_values(1)
-            if not existing_headers or existing_headers[0] != "Company":
-                 main_sheet.clear()
-                 main_sheet.append_row(expected_headers)
-        else:
-            main_sheet.append_row(expected_headers)
-            
-        main_sheet.append_row(list(row_data.values()))
-        
-        # 2. Бекап
-        try:
-            backup_sheet = spreadsheet.worksheet("Backup_Logs")
-        except gspread.exceptions.WorksheetNotFound:
-            backup_sheet = spreadsheet.add_worksheet(title="Backup_Logs", rows="1000", cols="20")
-            backup_sheet.append_row(expected_headers)
-            
-        backup_sheet.append_row(list(row_data.values()))
-        
-        return True
-    except Exception as e:
-        st.error(f"Save Error: {e}")
-        return False
-
-def process_data(user_api_key, image_bytes, audio_file, user_text):
-    genai.configure(api_key=user_api_key)
-    try:
-        model = genai.GenerativeModel(MODEL_NAME)
-    except:
-        model = genai.GenerativeModel("gemini-2.5-pro")
-
-    # Оновлений промпт із підтримкою трьох мов
-    system_instruction = """
-    You are an AI Sales Assistant.
-    TASK: Extract structured data.
-    OUTPUT LANGUAGE: Match User Interface Language (UA/EN/DE).
-    RETURN JSON ONLY:
-    {
-        "company_name": "string",
-        "contact_person": "string",
-        "position": "string",
-        "email": "string",
-        "phone": "string",
-        "summary": "string",
-        "sentiment": "string",
-        "next_steps": "string"
+# --- 3. LOCALIZATION DICTIONARY ---
+translations = {
+    'uk': {
+        'hero_title': "Expo AI",
+        'hero_subtitle': "Інтелектуальна обробка лідів у реальному часі.",
+        'settings': "Налаштування",
+        'api_label': "Gemini API Key",
+        'api_help': "Ваш ключ для доступу до AI",
+        'theme': "Тема інтерфейсу",
+        'lang': "Мова інтерфейсу",
+        'dark': "Темна (Midnight)",
+        'light': "Світла (Ceramic)",
+        'input_ph': "Введіть назву компанії...",
+        'tab_photo': "📸 Сканер",
+        'tab_upload': "📂 Завантаження",
+        'tab_cam': "Камера",
+        'label_voice': "🎙 Голосові нотатки",
+        'btn_process': "Аналізувати та Зберегти",
+        'history': "Історія лідів",
+        'empty': "Поки що записів немає",
+        'login_req': "Авторизація",
+        'login_msg': "Введіть API ключ у бічній панелі для доступу.",
+        'success': "Успішно збережено!",
+        'err_server': "Помилка з'єднання з Google Sheets"
+    },
+    'en': {
+        'hero_title': "Expo AI",
+        'hero_subtitle': "Intelligent real-time lead capture.",
+        'settings': "Settings",
+        'api_label': "Gemini API Key",
+        'api_help': "Your access key for AI",
+        'theme': "Appearance",
+        'lang': "Language",
+        'dark': "Dark (Midnight)",
+        'light': "Light (Ceramic)",
+        'input_ph': "Enter company name...",
+        'tab_photo': "📸 Scanner",
+        'tab_upload': "📂 Upload",
+        'tab_cam': "Camera",
+        'label_voice': "🎙 Voice Notes",
+        'btn_process': "Analyze & Save",
+        'history': "Lead History",
+        'empty': "No records yet",
+        'login_req': "Authentication",
+        'login_msg': "Enter API Key in sidebar to continue.",
+        'success': "Successfully saved!",
+        'err_server': "Google Sheets connection error"
+    },
+    'de': {
+        'hero_title': "Expo AI",
+        'hero_subtitle': "Intelligente Lead-Erfassung in Echtzeit.",
+        'settings': "Einstellungen",
+        'api_label': "Gemini API Key",
+        'api_help': "Ihr Zugangsschlüssel für KI",
+        'theme': "Erscheinungsbild",
+        'lang': "Sprache",
+        'dark': "Dunkel (Midnight)",
+        'light': "Hell (Ceramic)",
+        'input_ph': "Firmenname eingeben...",
+        'tab_photo': "📸 Scanner",
+        'tab_upload': "📂 Datei",
+        'tab_cam': "Kamera",
+        'label_voice': "🎙 Sprachnotizen",
+        'btn_process': "Analysieren & Speichern",
+        'history': "Verlauf",
+        'empty': "Noch keine Einträge",
+        'login_req': "Authentifizierung",
+        'login_msg': "Geben Sie den API-Schlüssel ein.",
+        'success': "Erfolgreich gespeichert!",
+        'err_server': "Verbindungsfehler zu Google Sheets"
     }
+}
+
+def t(key): return translations[st.session_state['language']][key]
+
+# --- 4. LOGIC & API ---
+@st.cache_resource
+def get_sheets():
+    try:
+        creds_str = os.environ.get("GOOGLE_CREDENTIALS") or st.secrets.get("GOOGLE_CREDENTIALS")
+        if not creds_str: return None
+        creds = Credentials.from_service_account_info(json.loads(creds_str), scopes=["https://www.googleapis.com/auth/spreadsheets"])
+        return gspread.authorize(creds)
+    except: return None
+
+def load_history_data():
+    client = get_sheets()
+    if not client: return []
+    try: return list(reversed(client.open("Sales Leads").sheet1.get_all_records()))
+    except: return []
+
+def push_data(data):
+    client = get_sheets()
+    if not client: return False
+    try:
+        sh = client.open("Sales Leads")
+        # Main Sheet
+        ws = sh.sheet1
+        if ws.row_count > 0 and (not ws.row_values(1) or ws.row_values(1)[0] != "Company"):
+            ws.clear(); ws.append_row(list(data.keys()))
+        elif ws.row_count == 0: ws.append_row(list(data.keys()))
+        ws.append_row(list(data.values()))
+        
+        # Backup
+        try: bu = sh.worksheet("Backup_Logs")
+        except: bu = sh.add_worksheet("Backup_Logs", 1000, 20); bu.append_row(list(data.keys()))
+        bu.append_row(list(data.values()))
+        return True
+    except: return False
+
+def analyze_lead(key, img, aud, txt):
+    genai.configure(api_key=key)
+    model = genai.GenerativeModel("gemini-2.5-pro")
+    
+    prompt = """
+    Extract sales lead data. JSON only.
+    Fields: company_name, contact_person, position, email, phone, summary, sentiment, next_steps.
+    Language: Match User Interface Language (UA/EN/DE).
     """
+    content = [prompt]
+    if txt: content.append(f"Context: {txt}")
+    if img: content.append(Image.open(io.BytesIO(img)))
+    if aud: content.append({"mime_type": "audio/wav", "data": aud.read()})
     
-    content = [system_instruction]
-    if user_text: content.append(f"User Note / Company Name: {user_text}")
-    if image_bytes: content.append(Image.open(io.BytesIO(image_bytes)))
-    if audio_file: content.append({"mime_type": "audio/wav", "data": audio_file.read()})
+    res = model.generate_content(content, generation_config={"response_mime_type": "application/json"})
+    return json.loads(res.text)
 
-    response = model.generate_content(content, generation_config={"response_mime_type": "application/json"})
-    return json.loads(response.text)
+# --- 5. UI COMPONENTS ---
 
-# --- 5. UI LAYOUT ---
-
-# --- SIDEBAR ---
+# Sidebar
 with st.sidebar:
-    st.header(t('setup_title'))
+    st.markdown(f"### ⚙️ {t('settings')}")
     
-    # 1. API Key
-    user_gemini_key = st.text_input(t('label_gemini'), type="password")
-    st.caption(t('setup_warning'))
+    api_key = st.text_input(t('api_label'), type="password", help=t('api_help'))
+    st.markdown("---")
     
-    st.divider()
-    
-    # 2. Language Selection (UA / EN / DE)
-    lang_map = {'UA': 'uk', 'EN': 'en', 'DE': 'de'}
-    # Визначаємо індекс для radio button
-    curr = st.session_state['language']
-    idx = 0
-    if curr == 'en': idx = 1
-    elif curr == 'de': idx = 2
-    
-    lang_sel = st.radio("Language", ['UA', 'EN', 'DE'], index=idx, horizontal=True)
-    
-    selected_lang_code = lang_map[lang_sel]
-    if st.session_state['language'] != selected_lang_code:
-        st.session_state['language'] = selected_lang_code
-        st.rerun()
-    
-    st.divider()
+    # Lang Selector
+    langs = {'UA': 'uk', 'EN': 'en', 'DE': 'de'}
+    l_sel = st.pills(t('lang'), list(langs.keys()), default="UA" if st.session_state['language']=='uk' else ("DE" if st.session_state['language']=='de' else "EN"))
+    if l_sel and st.session_state['language'] != langs[l_sel]:
+        st.session_state['language'] = langs[l_sel]; st.rerun()
 
-    # 3. Theme Toggle
-    theme_sel = st.radio(
-        t('theme_label'), 
-        [t('theme_dark'), t('theme_light')],
-        index=0 if st.session_state['theme'] == 'dark' else 1
-    )
-    new_theme = 'dark' if theme_sel == t('theme_dark') else 'light'
+    # Theme Toggle
+    theme_ui = st.radio(t('theme'), [t('dark'), t('light')], index=0 if st.session_state['theme']=='dark' else 1)
+    new_theme = 'dark' if theme_ui == t('dark') else 'light'
     if st.session_state['theme'] != new_theme:
-        st.session_state['theme'] = new_theme
-        st.rerun()
+        st.session_state['theme'] = new_theme; st.rerun()
 
-# --- MAIN CONTENT ---
+# Main Header
+st.markdown(f"""
+    <div style="text-align: center; margin-bottom: 40px;">
+        <h1 style="font-size: 3rem; margin-bottom: 10px; background: linear-gradient(90deg, {current_theme['accent']}, #a855f7); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">{t('hero_title')}</h1>
+        <p style="font-size: 1.2rem; opacity: 0.8;">{t('hero_subtitle')}</p>
+    </div>
+""", unsafe_allow_html=True)
 
-MODEL_NAME = "gemini-2.5-pro"
+if not get_sheets():
+    st.error(t('err_server')); st.stop()
 
-# Header
-st.markdown(f"<h1 style='text-align: center; margin-bottom: 0;'>{t('title')}</h1>", unsafe_allow_html=True)
-st.markdown(f"<p style='text-align: center; opacity: 0.7; margin-bottom: 30px;'>{t('subtitle')}</p>", unsafe_allow_html=True)
-
-# Server Check
-if not get_google_sheet_client():
-    st.error(t('server_error'))
-    st.stop()
-
-# Auth Check
-disabled_state = not user_gemini_key
-
-if disabled_state:
-    st.info(f"⚠️ {t('auth_req')}: {t('auth_desc')}")
-    if 'history' not in st.session_state:
-        st.session_state['history'] = load_history()
+# Auth Gate
+if not api_key:
+    st.info(f"{t('login_req')}: {t('login_msg')}")
+    if 'history' not in st.session_state: st.session_state['history'] = load_history_data()
 else:
-    if 'history' not in st.session_state:
-        st.session_state['history'] = load_history()
+    if not st.session_state['history']: st.session_state['history'] = load_history_data()
 
-# Form Inputs
-col1, col2 = st.columns([1, 1], gap="medium")
+# Input Container
+disabled = not api_key
+
+# Responsive Grid
+col1, col2 = st.columns([1.2, 1], gap="large")
 
 with col1:
-    company_text = st.text_input("", placeholder=t('input_company_placeholder'), disabled=disabled_state, label_visibility="collapsed")
+    company = st.text_input("Company", placeholder=t('input_ph'), label_visibility="collapsed", disabled=disabled)
+    st.markdown("<div style='height: 12px'></div>", unsafe_allow_html=True)
     
-    st.markdown("<div style='height: 10px'></div>", unsafe_allow_html=True)
+    # Custom Tabs styling is applied via CSS
+    t1, t2 = st.tabs([t('tab_photo'), t('tab_upload')])
+    img_bytes = None
     
-    tab_cam, tab_up = st.tabs([t('photo_tab'), t('upload_tab')])
-    final_image_bytes = None
-    
-    with tab_cam:
-        cam_file = st.camera_input("Camera", label_visibility="collapsed", disabled=disabled_state)
-        if cam_file: final_image_bytes = cam_file.getvalue()
-        
-    with tab_up:
-        up_file = st.file_uploader("Upload", type=['jpg', 'png', 'jpeg'], label_visibility="collapsed", disabled=disabled_state)
-        if up_file: final_image_bytes = up_file.getvalue()
+    with t1:
+        c_file = st.camera_input("Cam", label_visibility="collapsed", disabled=disabled)
+        if c_file: img_bytes = c_file.getvalue()
+    with t2:
+        u_file = st.file_uploader("Up", type=['jpg','png'], label_visibility="collapsed", disabled=disabled)
+        if u_file: img_bytes = u_file.getvalue()
 
 with col2:
-    st.markdown(f"<span class='small-text'>{t('audio_label')}</span>", unsafe_allow_html=True)
-    audio_val = st.audio_input("Audio", label_visibility="collapsed")
+    st.markdown(f"**{t('label_voice')}**")
+    audio = st.audio_input("Voice", label_visibility="collapsed") # Check streamlit version for disabled param support
 
-st.markdown("---")
+st.markdown("<div style='margin-top: 30px;'></div>", unsafe_allow_html=True)
 
-# Submit Button
-if st.button(t('btn_submit'), type="primary", use_container_width=True, disabled=disabled_state):
-    if not any([company_text, final_image_bytes, audio_val]):
-        st.toast("⚠️ No data to send!")
+if st.button(t('btn_process'), type="primary", disabled=disabled):
+    if not any([company, img_bytes, audio]):
+        st.toast("⚠️ Input required", icon="⚡")
     else:
-        with st.spinner(t('processing')):
+        with st.spinner("✨ AI Processing..."):
             try:
-                # 1. AI Processing
-                result = process_data(user_gemini_key, final_image_bytes, audio_val, company_text)
-                timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                res = analyze_lead(api_key, img_bytes, audio, company)
+                final_comp = res.get("company_name") or company or "Unknown"
                 
-                ai_company = result.get("company_name", "").strip()
-                final_company_name = company_text if company_text else (ai_company if ai_company else "No Name")
-                
-                row_data = {
-                    "Company": final_company_name,
-                    "Contact": result.get("contact_person", ""),
-                    "Position": result.get("position", ""),
-                    "Email": result.get("email", ""),
-                    "Phone": result.get("phone", ""),
-                    "Sentiment": result.get("sentiment", ""),
-                    "Summary": result.get("summary", ""),
-                    "Next Steps": result.get("next_steps", ""),
-                    "Timestamp": timestamp
+                row = {
+                    "Company": final_comp,
+                    "Contact": res.get("contact_person", ""),
+                    "Position": res.get("position", ""),
+                    "Email": res.get("email", ""),
+                    "Phone": res.get("phone", ""),
+                    "Sentiment": res.get("sentiment", ""),
+                    "Summary": res.get("summary", ""),
+                    "Next Steps": res.get("next_steps", ""),
+                    "Timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
                 }
-
-                # 2. Save
-                if save_to_sheets(row_data):
-                    st.toast(t('success'))
-                    st.session_state['history'] = load_history()
                 
+                if push_data(row):
+                    st.balloons()
+                    st.toast(t('success'), icon="✅")
+                    st.session_state['history'] = load_history_data()
             except Exception as e:
                 st.error(f"Error: {e}")
 
-# History Display
-st.markdown(f"<br><h3>{t('history_header')}</h3>", unsafe_allow_html=True)
+# History Feed
+st.markdown(f"### {t('history')}")
+st.markdown("---")
 
-if st.session_state.get('history'):
-    for item in st.session_state['history'][:10]:
-        comp = item.get('Company') or "No Name"
-        time = item.get('Timestamp') or ""
-        
-        with st.expander(f"{comp} • {time}"):
+hist = st.session_state.get('history', [])
+if hist:
+    for item in hist[:8]:
+        with st.expander(f"🏢 {item.get('Company', 'No Name')}  •  {item.get('Timestamp', '')}"):
             st.markdown(f"""
-            <div class='small-text'>
-                <b>👤 Contact:</b> {item.get('Contact')} ({item.get('Position')})<br>
-                <b>📞 Info:</b> {item.get('Phone')} | 📧 {item.get('Email')}<br>
-                <b>📝 Summary:</b> {item.get('Summary')}<br>
-                <b>👉 Next:</b> {item.get('Next Steps')}
-            </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div><b>👤 Contact:</b> {item.get('Contact')}</div>
+                    <div><b>💼 Position:</b> {item.get('Position')}</div>
+                    <div><b>📞 Phone:</b> {item.get('Phone')}</div>
+                    <div><b>📧 Email:</b> {item.get('Email')}</div>
+                </div>
+                <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid {current_theme['border']};">
+                    <i>"{item.get('Summary')}"</i>
+                </div>
+                <div style="margin-top: 5px; color: {current_theme['accent']}; font-weight: 600;">
+                    👉 {item.get('Next Steps')}
+                </div>
             """, unsafe_allow_html=True)
 else:
-    st.caption(t('no_history'))
+    st.markdown(f"<p style='text-align:center; opacity:0.5;'>{t('empty')}</p>", unsafe_allow_html=True)
